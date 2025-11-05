@@ -1,0 +1,22 @@
+# Dependencias
+node_modules/
+
+# Compilados de TypeScript
+dist/
+
+# Variables de entorno
+.env
+.env.local
+
+# Logs y temporales
+*.log
+logs/
+tmp/
+
+# Archivos del sistema
+.DS_Store
+Thumbs.db
+
+# Otros
+coverage/
+.vscode/
