@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <title>Carga de Recibos RRHH</title>
+  <style>
+    body { font-family: Arial; max-width: 700px; margin: 20px auto; }
+    h1 { text-align: center; }
+    .box { border: 2px dashed #666; padding: 20px; border-radius: 10px; }
+    label { font-weight: bold; }
+    #result { white-space: pre; background: #f4f4f4; padding: 10px; margin-top: 20px; }
+  </style>
+</head>
+<body>
+
+<h1>Carga de Recibos (RRHH)</h1>
+
+<form id="form">
+  <label>Año:</label><br>
+  <input type="number" id="year" value="2025" required><br><br>
+
+  <label>Mes:</label><br>
+  <input type="number" id="month" value="11" min="1" max="12" required><br><br>
+
+  <label>Quincena (1 o 2, opcional):</label><br>
+  <input type="number" id="fortnight" min="1" max="2"><br><br>
+
+  <label>Archivos PDF:</label>
+  <div class="box">
+    <input type="file" id="files" multiple accept="application/pdf">
+  </div>
+
+  <br>
+  <button type="submit">Subir</button>
+</form>
+
+<pre id="result"></pre>
+
+<script>
+document.getElementById("form").addEventListener("submit", async (evt) => {
+  evt.preventDefault();
+
+  const year = document.getElementById("year").value;
+  const month = document.getElementById("month").value;
+  const fortnight = document.getElementById("fortnight").value;
+  const files = document.getElementById("files").files;
+
+  if (!files.length) {
+    alert("Seleccioná al menos 1 PDF");
+    return;
+  }
+
+  const form = new FormData();
+  form.append("periodYear", year);
+  form.append("periodMonth", month);
+  if (fortnight) form.append("fortnight", fortnight);
+
+  for (const f of files) form.append("files", f);
+
+  const res = await fetch("/api/upload/batch", {
+    method: "POST",
+    body: form
+  });
+
+  document.getElementById("result").textContent =
+    JSON.stringify(await res.json(), null, 2);
+});
+</script>
+
+</body>
+</html>

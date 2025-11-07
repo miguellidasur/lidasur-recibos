@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <title>RRHH · Carga masiva de recibos</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    :root { color-scheme: light dark; }
+    body { font-family: system-ui, sans-serif; margin: 24px; max-width: 980px; }
+    h1 { margin: 0 0 12px }
+    .row { display:flex; gap:12px; align-items:center; flex-wrap:wrap; }
+    input, button { padding:8px 10px; font-size:14px; }
+    .drop {
+      border:2px dashed #888; padding:20px; border-radius:12px; text-align:center;
+      margin-top:12px; cursor:pointer;
+    }
+    table { width:100%; border-collapse: collapse; margin-top:16px; }
+    th, td { border-bottom:1px solid #eee; padding:8px 10px; font-size:14px; }
+    th { text-align:left; background:#fafafa }
+    .ok { color:#137d13; }
+    .warn { color:#b36b00; }
+    .err { color:#b00020; }
+    .muted { color:#777; }
+    .right { text-align:right; }
+    #log { white-space: pre-wrap; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+  </style>
+</head>
+<body>
+  <h1>RRHH · Carga masiva de recibos</h1>
+
+  <div class="row">
+    <label>Año</label><input id="year" type="number" value="2025" style="width:100px" />
+    <label>Mes</label><input id="month" type="number" value="11" min="1" max="12" style="width:80px" />
+    <label>Quincena</label><input id="fortnight" type="number" min="1" max="2" placeholder="(opcional)" style="width:120px" />
+    <button id="btnCheck">Prevalidar</button>
+    <button id="btnUpload" disabled>Subir</button>
+    <span id="status" class="muted"></span>
+  </div>
+
+  <div id="drop" class="drop">
+    <input id="fileInput" type="file" accept="application/pdf" multiple hidden />
+    <div><strong>Arrastrá PDFs acá</strong> o hacé click para seleccionar</div>
+    <div class="muted">Formato esperado: <code>CEDULA_APELLIDO_NOMBRE.pdf</code></div>
+  </div>
+
+  <table id="tbl" hidden>
+    <thead>
+      <tr>
+        <th>Archivo</th>
+        <th>Cédula</th>
+        <th>Nombre</th>
+        <th>Estado</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+
+  <h3>Resultado</h3>
+  <div id="log" class="muted"></div>
+
+<script>
+const $ = s => document.querySelector(s);
+const drop = $("#drop");
+const fileInput = $("#fileInput");
+const tbl = $("#tbl");
+const tbody = $("#tbl tbody");
+const statusEl = $("#status");
+const logEl = $("#log");
+const yearEl = $("#year");
+const monthEl = $("#month");
+const fortEl = $("#fortnight");
+
+let files = [];
+
+drop.addEventListener("click", () => fileInput.click());
+drop.addEventListener("dragover", e => { e.preventDefault(); drop.style.opacity = 0.8; });
+drop.addEventListener("dragleave", () => drop.style.opacity = 1);
+drop.addEventListener("drop", (e) => {
+  e.preventDefault();
+  drop.style.opacity = 1;
+  if (e.dataTransfer?.files?.length) {
+    files = [...e.dataTransfer.files];
+    renderList();
+  }
+});
+fileInput.addEventListener("change", () => {
+  files = [...fileInput.files];
+  renderList();
+});
+
+function parseName(fileName){
+  const base = fileName.replace(/\s+/g, "_");
+  const m = base.match(/^(\d{5,12})_([A-ZÁÉÍÓÚÑ]+[A-ZÁÉÍÓÚÑ]*)(.*)\.pdf$/i);
+  if (!m) return { ok:false, cedula:null, nombre:null, reason:"Nombre inválido" };
+  const ced = m[1];
+  const nombre = base.replace(/^(\d{5,12})_/, "").replace(/\.pdf$/i,"");
+  return { ok:true, cedula:ced, nombre };
+}
+
+function renderList(rows){
+  const list = rows ?? files.map(f => {
+    const p = parseName(f.name);
+    return { file:f, name:f.name, ...p, estado: p.ok ? "Pendiente" : p.reason, className: p.ok ? "" : "err" };
+  });
+  tbody.innerHTML = "";
+  for (const r of list) {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td>${r.name}</td>
+      <td>${r.cedula ?? "-"}</td>
+      <td>${r.nombre ?? "-"}</td>
+      <td class="${r.className || ""}">${r.estado}</td>
+    `;
+    tbody.appendChild(tr);
+  }
+  tbl.hidden = list.length === 0;
+  $("#btnUpload").disabled = true;
+  $("#btnCheck").disabled = list.length === 0;
+  statusEl.textContent = list.length ? `${list.length} archivo(s) seleccionados` : "";
+}
+
+$("#btnCheck").addEventListener("click", async () => {
+  logEl.textContent = "";
+  const y = +yearEl.value, m = +monthEl.value;
+  if (!y || !m || m<1 || m>12) {
+    alert("Año/Mes inválidos");
+    return;
+  }
+  const parseds = files.map(f => ({ ...parseName(f.name), file:f, name:f.name }));
+  const invalid = parseds.filter(p => !p.ok);
+  if (invalid.length) {
+    renderList(parseds.map(p => ({...p, estado: p.ok ? "Pendiente" : p.reason, className: p.ok ? "" : "err" })));
+    logEl.textContent = "Corré los nombres inválidos antes de subir.";
+    return;
+  }
+
+  // chequeo de cédulas existentes
+  const cedulas = [...new Set(parseds.map(p => p.cedula))];
+  const resp = await fetch("/api/users/check", {
+    method:"POST",
+    headers: { "Content-Type":"application/json" },
+    body: JSON.stringify({ cedulas })
+  });
+  const data = await resp.json();
+  const missing = new Set(data.missing || []);
+  const rows = parseds.map(p => {
+    if (missing.has(p.cedula)) {
+      return { ...p, estado: "Cédula no existe", className:"warn" };
+    }
+    return { ...p, estado:"Listo para subir", className:"ok" };
+  });
+  renderList(rows);
+  // habilitamos subir aun con warn (el backend te rechazará esos)
+  $("#btnUpload").disabled = false;
+});
+
+$("#btnUpload").addEventListener("click", async () => {
+  logEl.textContent = "";
+  const y = +yearEl.value, m = +monthEl.value, f = fortEl.value ? +fortEl.value : "";
+  const form = new FormData();
+  form.append("periodYear", String(y));
+  form.append("periodMonth", String(m));
+  if (f) form.append("fortnight", String(f));
+  for (const file of files) form.append("files", file);
+
+  const res = await fetch("/api/upload/batch", { method:"POST", body: form });
+  const json = await res.json();
+  const items = json.items || [];
+  const lines = items.map(it => {
+    if (it.ok) return `OK   · ${it.filename}  → id=${it.dbId} v${it.version}`;
+    return `FAIL · ${it.filename}  → ${it.msg || "error"}`;
+  });
+  logEl.textContent = `Totales: ok=${json?.totals?.ok ?? 0}, failed=${json?.totals?.failed ?? 0}\n` + lines.join("\n");
+});
+</script>
+</body>
+</html>

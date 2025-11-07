@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Login Recibos de Sueldo</title>
+  <style>
+    * { box-sizing: border-box; font-family: 'Segoe UI', system-ui, sans-serif; }
+    :root { --brand:#005AA7; --brand-700:#003f7f; --bg-grad:linear-gradient(to right, #005AA7, #FFFDE4); }
+    body{
+      margin:0; min-height:100vh; display:flex; align-items:center; justify-content:center;
+      background: var(--bg-grad);
+    }
+    .login-container{
+      background:#fff; width:400px; max-width:92vw; border-radius:12px;
+      box-shadow:0 10px 30px rgba(0,0,0,.20); overflow:hidden;
+    }
+    .tabs{ display:flex; border-bottom:1px solid #eaeaea; }
+    .tab-btn{
+      flex:1; padding:14px 12px; background:#f6f6f6; border:0; cursor:pointer; font-weight:600;
+    }
+    .tab-btn[aria-selected="true"]{ background:var(--brand); color:#fff; }
+    .panel{ display:none; padding:20px; }
+    .panel[aria-hidden="false"]{ display:block; }
+    .field{ margin:12px 0; }
+    label{ display:block; font-size:.9rem; margin-bottom:6px; color:#333; }
+    input{
+      width:100%; padding:10px 12px; border:1px solid #cfcfcf; border-radius:8px; font-size:1rem;
+    }
+    .row{ display:flex; gap:8px; align-items:center; }
+    .pwd-wrap{ position:relative; }
+    .toggle-pwd{
+      position:absolute; right:8px; top:50%; transform:translateY(-50%);
+      border:0; background:transparent; cursor:pointer; font-size:.85rem; color:#444;
+    }
+    .actions{ margin-top:14px; display:flex; gap:8px; align-items:center; }
+    .btn{
+      width:100%; padding:10px 12px; border:0; border-radius:8px; font-weight:700; cursor:pointer;
+      background:var(--brand); color:#fff; transition:background .2s;
+    }
+    .btn:hover{ background:var(--brand-700); }
+    .btn:disabled{ opacity:.6; cursor:not-allowed; }
+    .help{ font-size:.85rem; color:#666; margin-top:6px; }
+    .error{ background:#ffe8e8; color:#7a0022; border:1px solid #ffbcbc; padding:8px 10px; border-radius:8px; font-size:.9rem; margin-top:8px; display:none; }
+    .error.show{ display:block; }
+    .muted{ color:#666; font-size:.85rem; text-align:center; margin-top:10px; }
+  </style>
+</head>
+<body>
+  <div class="login-container" role="application">
+    <div class="tabs" role="tablist" aria-label="Tipo de acceso">
+      <button class="tab-btn" role="tab" id="tab-empleado" aria-controls="panel-empleado" aria-selected="true">Empleado</button>
+      <button class="tab-btn" role="tab" id="tab-rrhh" aria-controls="panel-rrhh" aria-selected="false">Empresa (RRHH)</button>
+    </div>
+
+    <!-- Empleado -->
+    <section id="panel-empleado" class="panel" role="tabpanel" aria-labelledby="tab-empleado" aria-hidden="false">
+      <h3>Acceso Empleado</h3>
+      <form id="form-emp" novalidate>
+        <div class="field">
+          <label for="emp-cedula">Cédula de Identidad</label>
+          <input id="emp-cedula" name="cedula" inputmode="numeric" pattern="\\d{5,12}" autocomplete="username"
+                 placeholder="Solo números" required>
+          <div class="help">5 a 12 dígitos. Sin puntos ni guiones.</div>
+        </div>
+        <div class="field pwd-wrap">
+          <label for="emp-pass">Contraseña</label>
+          <input id="emp-pass" name="password" type="password" autocomplete="current-password" required>
+          <button type="button" class="toggle-pwd" data-for="emp-pass">Mostrar</button>
+        </div>
+        <div class="error" id="emp-error"></div>
+        <div class="actions">
+          <button class="btn" id="emp-submit" type="submit">Ingresar</button>
+        </div>
+        <div class="muted"><a href="#" aria-disabled="true">¿Olvidaste la contraseña?</a></div>
+      </form>
+    </section>
+
+    <!-- RRHH -->
+    <section id="panel-rrhh" class="panel" role="tabpanel" aria-labelledby="tab-rrhh" aria-hidden="true">
+      <h3>Acceso Empresa (RRHH)</h3>
+      <form id="form-rrhh" novalidate>
+        <div class="field">
+          <label for="adm-user">Usuario</label>
+          <input id="adm-user" name="username" autocomplete="username" required>
+        </div>
+        <div class="field pwd-wrap">
+          <label for="adm-pass">Contraseña</label>
+          <input id="adm-pass" name="password" type="password" autocomplete="current-password" required>
+          <button type="button" class="toggle-pwd" data-for="adm-pass">Mostrar</button>
+        </div>
+        <div class="error" id="rrhh-error"></div>
+        <div class="actions">
+          <button class="btn" id="rrhh-submit" type="submit">Ingresar</button>
+        </div>
+      </form>
+    </section>
+  </div>
+
+  <script>
+    // Tabs accesibles
+    const tabs = Array.from(document.querySelectorAll('[role="tab"]'));
+    const panels = Array.from(document.querySelectorAll('[role="tabpanel"]'));
+    function selectTab(id){
+      tabs.forEach(t=>{
+        const sel = t.id === id;
+        t.setAttribute('aria-selected', sel);
+        document.getElementById(t.getAttribute('aria-controls'))
+          .setAttribute('aria-hidden', !sel);
+      });
+    }
+    tabs.forEach(t=>{
+      t.addEventListener('click', ()=>selectTab(t.id));
+      t.addEventListener('keydown', (e)=>{
+        if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
+          const idx = tabs.indexOf(t);
+          const next = e.key === 'ArrowRight' ? (idx+1)%tabs.length : (idx-1+tabs.length)%tabs.length;
+          tabs[next].focus(); selectTab(tabs[next].id);
+        }
+      });
+    });
+
+    // Toggle password
+    document.querySelectorAll('.toggle-pwd').forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        const input = document.getElementById(btn.dataset.for);
+        const isPwd = input.type === 'password';
+        input.type = isPwd ? 'text' : 'password';
+        btn.textContent = isPwd ? 'Ocultar' : 'Mostrar';
+      });
+    });
+
+    // Validación mínima de cédula
+    function validCedula(v){ return /^\d{5,12}$/.test(v || ''); }
+
+    // Submit Empleado
+    document.getElementById('form-emp').addEventListener('submit', async (e)=>{
+      e.preventDefault();
+      const ced = document.getElementById('emp-cedula').value.trim();
+      const pass = document.getElementById('emp-pass').value;
+      const err = document.getElementById('emp-error');
+      err.classList.remove('show'); err.textContent = '';
+
+      if (!validCedula(ced)) {
+        err.textContent = 'Cédula inválida. Ingresá solo números, 5 a 12 dígitos.';
+        err.classList.add('show');
+        return;
+      }
+
+      const btn = document.getElementById('emp-submit');
+      btn.disabled = true; btn.textContent = 'Ingresando...';
+
+      try {
+        // TODO: conecta con tu endpoint real
+        // const res = await fetch('/api/auth/empleado/login', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ cedula: ced, password: pass }) });
+        // const data = await res.json();
+        // if (!res.ok) throw new Error(data.error || 'Error de autenticación');
+        // location.href = '/empleado.html';
+        await new Promise(r=>setTimeout(r,600)); // mock
+        alert('Login empleado OK (mock)');
+      } catch(ex){
+        err.textContent = ex.message || 'No se pudo iniciar sesión';
+        err.classList.add('show');
+      } finally {
+        btn.disabled = false; btn.textContent = 'Ingresar';
+      }
+    });
+
+    // Submit RRHH
+    document.getElementById('form-rrhh').addEventListener('submit', async (e)=>{
+      e.preventDefault();
+      const user = document.getElementById('adm-user').value.trim();
+      const pass = document.getElementById('adm-pass').value;
+      const err = document.getElementById('rrhh-error');
+      err.classList.remove('show'); err.textContent = '';
+
+      if (!user || !pass) {
+        err.textContent = 'Completá usuario y contraseña.'; err.classList.add('show'); return;
+      }
+
+      const btn = document.getElementById('rrhh-submit');
+      btn.disabled = true; btn.textContent = 'Ingresando...';
+
+      try {
+        // TODO: conecta con tu endpoint real
+        // const res = await fetch('/api/auth/rrhh/login', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ username:user, password:pass }) });
+        // const data = await res.json();
+        // if (!res.ok) throw new Error(data.error || 'Error de autenticación');
+        // location.href = '/rrhh/dashboard.html';
+        await new Promise(r=>setTimeout(r,600)); // mock
+        alert('Login RRHH OK (mock)');
+      } catch(ex){
+        err.textContent = ex.message || 'No se pudo iniciar sesión';
+        err.classList.add('show');
+      } finally {
+        btn.disabled = false; btn.textContent = 'Ingresar';
+      }
+    });
+  </script>
+</body>
+</html>

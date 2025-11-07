@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>RRHH · Importar usuarios</title>
+  <style>
+    :root { color-scheme: light dark; }
+    * { box-sizing: border-box; font-family: system-ui, Segoe UI, Roboto, sans-serif; }
+    body { margin: 0; background:#0a2540; min-height: 100dvh; display:grid; place-items:center; }
+    .card { width:min(1000px,94vw); background:#fff; color:#111; border-radius:14px; padding:18px; box-shadow:0 12px 40px rgba(0,0,0,.25); }
+    h1 { margin: 0 0 4px; font-size: 22px; }
+    .muted { color:#667085; font-size:13px; margin-bottom:14px; }
+    .row { display:flex; gap:10px; align-items:center; margin:10px 0 14px; flex-wrap:wrap; }
+    input[type=file] { padding:10px; border:1px solid #d0d7de; border-radius:10px; background:#fafafa; }
+    button { padding:10px 14px; border:none; border-radius:10px; background:#005AA7; color:#fff; cursor:pointer; }
+    button.secondary { background:#eff1f5; color:#111; border:1px solid #d0d7de; }
+    button:disabled { opacity:.5; cursor:not-allowed; }
+    .stats { display:flex; gap:12px; flex-wrap:wrap; }
+    .pill { padding:4px 10px; border-radius:999px; background:#eef2ff; color:#3538cd; font-size:12px; }
+    table { width:100%; border-collapse:collapse; margin-top:8px; }
+    th, td { text-align:left; padding:8px 10px; border-bottom:1px solid #eee; font-size:14px; }
+    th { color:#475467; }
+    .hint { font-size:12px; color:#667085; margin-top:6px; }
+    .footer { display:flex; justify-content:space-between; align-items:center; margin-top:10px; }
+    a.btn { text-decoration:none; padding:10px 14px; border-radius:10px; border:1px solid #d0d7de; background:#fff; color:#111; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>RRHH · Importar usuarios</h1>
+    <div class="muted">
+      Subí un <strong>CSV</strong> con columnas: <code>Cedula,FirstName,LastName,Email,IsActive</code>.
+      Los valores de <em>IsActive</em> aceptan: “si/no”, “true/false”, “1/0”, “activo/inactivo”.
+    </div>
+
+    <div class="row">
+      <input id="file" type="file" accept=".csv,text/csv" />
+      <button id="btnDry" disabled>Previsualizar</button>
+      <button id="btnCommit" disabled>Confirmar importación</button>
+      <a class="btn" href="/upload.html">Ir a carga masiva de PDFs</a>
+    </div>
+
+    <div id="stats" class="stats" style="display:none"></div>
+
+    <div id="wrap" style="margin-top:8px;">
+      <div class="hint">Todavía no hay previsualización. Elegí un CSV y tocá “Previsualizar”.</div>
+    </div>
+
+    <div class="footer">
+      <div class="hint">Consejo: mantené el CSV como “fuente de verdad”. Evita teclear usuarios a mano, ya sabemos cómo termina.</div>
+      <div class="hint">v0.1 POC sin login</div>
+    </div>
+  </div>
+
+  <script>
+    const $file = document.getElementById('file');
+    const $btnDry = document.getElementById('btnDry');
+    const $btnCommit = document.getElementById('btnCommit');
+    const $wrap = document.getElementById('wrap');
+    const $stats = document.getElementById('stats');
+
+    let lastPreview = null;   // guardo la previsualización para mostrarla y/o confirmar
+
+    $file.addEventListener('change', () => {
+      $btnDry.disabled = !$file.files.length;
+      $btnCommit.disabled = true;
+      lastPreview = null;
+      $wrap.innerHTML = '<div class="hint">Archivo listo. Tocá “Previsualizar”.</div>';
+      $stats.style.display = 'none';
+    });
+
+    $btnDry.addEventListener('click', async () => {
+      if (!$file.files.length) return;
+      $btnDry.disabled = true;
+      $btnCommit.disabled = true;
+
+      const fd = new FormData();
+      fd.append('file', $file.files[0]);
+
+      const res = await fetch('/api/users/import/dry-run', { method: 'POST', body: fd });
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok || !data.ok) {
+        $wrap.innerHTML = '<div class="hint">Error en previsualización. Revisá el CSV.</div>';
+        $btnDry.disabled = false;
+        return;
+        }
+
+      lastPreview = data;
+      renderPreview(data);
+      $btnDry.disabled = false;
+      $btnCommit.disabled = false;
+    });
+
+    $btnCommit.addEventListener('click', async () => {
+      if (!$file.files.length) return;
+      if (!confirm('¿Confirmar importación? Esto aplicará INSERT/UPDATE/DEACTIVATE según el CSV.')) return;
+
+      $btnCommit.disabled = true;
+
+      const fd = new FormData();
+      fd.append('file', $file.files[0]);
+
+      const res = await fetch('/api/users/import/commit', { method: 'POST', body: fd });
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok || !data.ok) {
+        alert('Error al aplicar cambios.');
+        $btnCommit.disabled = false;
+        return;
+      }
+      alert('Importación aplicada con éxito. Podés volver a previsualizar otro CSV si querés sufrir más.');
+      $btnCommit.disabled = false;
+    });
+
+    function renderPreview(p) {
+      // Stats
+      $stats.style.display = 'flex';
+      $stats.innerHTML = `
+        <div class="pill">Filas: ${p.total}</div>
+        <div class="pill">INSERT: ${p.willInsert}</div>
+        <div class="pill">UPDATE: ${p.willUpdate}</div>
+        <div class="pill">DEACTIVATE: ${p.willDeactivate}</div>
+        <div class="pill">INVALID: ${p.invalid?.length ?? 0}</div>
+      `;
+
+      // Tabla preview
+      const rows = p.preview.map(x => `
+        <tr>
+          <td>${x.row}</td>
+          <td>${x.cedula || ''}</td>
+          <td>${x.action}</td>
+          <td>${x.why || ''}</td>
+        </tr>
+      `).join('');
+
+      $wrap.innerHTML = `
+        <table>
+          <thead>
+            <tr><th>#</th><th>Cédula</th><th>Acción</th><th>Nota</th></tr>
+          </thead>
+          <tbody>${rows}</tbody>
+        </table>
+      `;
+    }
+  </script>
+</body>
+</html>

@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <title>Consulta de Recibos</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    body { font-family: system-ui, sans-serif; margin: 24px; max-width: 960px; }
+    h1 { margin: 0 0 16px }
+    .card { padding: 16px; border: 1px solid #e5e5e5; border-radius: 12px; }
+    .row { display: flex; gap: 8px; align-items: center; margin-bottom: 12px; }
+    input, select, button { padding: 8px 10px; font-size: 14px; }
+    button { cursor: pointer }
+    table { width: 100%; border-collapse: collapse; margin-top: 12px; }
+    th, td { padding: 8px 10px; border-bottom: 1px solid #eee; font-size: 14px; }
+    th { text-align: left; background:#fafafa }
+    .muted { color:#777 }
+    .right { text-align: right }
+    .badge { padding:2px 6px; border-radius: 6px; background:#f4f4f4; font-size:12px }
+    .err { color: #b00020; margin-top: 8px }
+  </style>
+</head>
+<body>
+  <h1>Recibos</h1>
+
+  <div class="card">
+    <div class="row">
+      <label for="cedula">Cédula:</label>
+      <input id="cedula" placeholder="12345678" />
+      <button id="btnBuscar">Buscar</button>
+      <span id="status" class="muted"></span>
+    </div>
+
+    <table id="tabla" hidden>
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Período</th>
+          <th>Quincena</th>
+          <th>Archivo</th>
+          <th class="right">Tamaño</th>
+          <th>Versión</th>
+          <th>Subido</th>
+          <th>Descargar</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+
+    <div id="msg" class="err"></div>
+  </div>
+
+  <script>
+    const $ = (s)=>document.querySelector(s);
+    const tabla = $("#tabla");
+    const tbody = $("#tabla tbody");
+    const statusEl = $("#status");
+    const msgEl = $("#msg");
+
+    $("#btnBuscar").addEventListener("click", async () => {
+      msgEl.textContent = "";
+      statusEl.textContent = "";
+      tabla.hidden = true;
+      tbody.innerHTML = "";
+
+      const cedula = $("#cedula").value.trim();
+      if (!/^\d{5,12}$/.test(cedula)) {
+        msgEl.textContent = "Ingresá una cédula válida (5 a 12 dígitos).";
+        return;
+      }
+
+      statusEl.textContent = "Buscando...";
+      try {
+        const res = await fetch(`/api/recibos?cedula=${encodeURIComponent(cedula)}`);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        const items = data.items || [];
+
+        if (items.length === 0) {
+          statusEl.textContent = "Sin resultados.";
+          return;
+        }
+
+        // Render
+        for (const r of items) {
+          const tr = document.createElement("tr");
+          const size = r.FileSizeBytes ? (Number(r.FileSizeBytes)/1024).toFixed(1)+" KB" : "-";
+          const k = r.Fortnight === 1 ? "1ra" : (r.Fortnight === 2 ? "2da" : "-");
+          const periodo = `${r.PeriodYear}-${String(r.PeriodMonth).padStart(2,"0")}`;
+
+          tr.innerHTML = `
+            <td>${r.Id}</td>
+            <td>${periodo}</td>
+            <td>${k}</td>
+            <td>${r.FileName || "-"}</td>
+            <td class="right">${size}</td>
+            <td><span class="badge">v${r.Version ?? "-"}</span></td>
+            <td class="muted">${r.UploadedAt ? new Date(r.UploadedAt).toLocaleString() : "-"}</td>
+            <td><a href="/api/recibos/${r.Id}/pdf">PDF</a></td>
+          `;
+          tbody.appendChild(tr);
+        }
+
+        tabla.hidden = false;
+        statusEl.textContent = `${items.length} resultado(s).`;
+      } catch (e) {
+        msgEl.textContent = "Error al consultar. " + (e?.message ?? "");
+      } finally {
+        // nada
+      }
+    });
+
+    // UX: enter para buscar
+    $("#cedula").addEventListener("keydown", (e) => {
+      if (e.key === "Enter") $("#btnBuscar").click();
+    });
+  </script>
+</body>
+</html>
